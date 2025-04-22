@@ -267,45 +267,6 @@ void VulkanEngine::Init()
 	_isInitialized = true;
 }
 
-void VulkanEngine::Cleanup()
-{
-	if (_isInitialized) {
-
-		vkDeviceWaitIdle(_vkb_device);
-
-		for (int i = 0; i < FRAME_OVERLAP; i++) {
-			vkDestroyCommandPool(_vkb_device, _frames[i]._commandPool, nullptr);
-		}
-
-		vkDestroyInstance(_vkb_inst, nullptr);
-
-		DestroySwapchain();
-
-		vkDestroySurfaceKHR(_vkb_inst, _surface, nullptr);
-		vkDestroyDevice(_vkb_device, nullptr);
-
-		vkb::destroy_device(_vkb_device);
-		vkb::destroy_surface(_vkb_inst, _surface);
-		vkb::destroy_instance(_vkb_inst);
-		glfwDestroyWindow(window);
-		glfwTerminate();
-
-		for (int i = 0; i < FRAME_OVERLAP; i++) {
-
-			//already written from before
-			vkDestroyCommandPool(_vkb_device, _frames[i]._commandPool, nullptr);
-
-			//destroy sync objects
-			vkDestroyFence(_vkb_device, _frames[i]._renderFence, nullptr);
-			vkDestroySemaphore(_vkb_device, _frames[i]._renderSemaphore, nullptr);
-			vkDestroySemaphore(_vkb_device, _frames[i]._swapchainSemaphore, nullptr);
-		}
-	}
-
-	// clear engine pointer
-	loadedEngine = nullptr;
-}
-
 void VulkanEngine::Draw()
 {
 	VK_CHECK(vkWaitForFences(_vkb_device, 1, &GetCurrentFrame()._renderFence, true, UINT64_MAX));
@@ -370,11 +331,48 @@ void VulkanEngine::Draw()
 	_frameNumber++;
 }
 
+
+void VulkanEngine::Cleanup()
+{
+	if (_isInitialized) {
+
+		vkDeviceWaitIdle(_vkb_device);
+
+		for (int i = 0; i < FRAME_OVERLAP; i++) {
+
+			//already written from before
+			vkDestroyCommandPool(_vkb_device, _frames[i]._commandPool, nullptr);
+
+			//destroy sync objects
+			vkDestroyFence(_vkb_device, _frames[i]._renderFence, nullptr);
+			vkDestroySemaphore(_vkb_device, _frames[i]._renderSemaphore, nullptr);
+			vkDestroySemaphore(_vkb_device, _frames[i]._swapchainSemaphore, nullptr);
+		}
+		DestroySwapchain();
+		vkb::destroy_surface(_vkb_inst, _surface);
+		vkb::destroy_device(_vkb_device);
+		vkb::destroy_instance(_vkb_inst);
+		glfwDestroyWindow(window);
+		glfwTerminate();
+	}
+
+	// clear engine pointer
+	loadedEngine = nullptr;
+}
+
 void VulkanEngine::Run()
 {
-	while (true)
+	while (!glfwWindowShouldClose(window) && !stop_rendering)
 	{
+		glfwPollEvents();
+
 		Draw();
+	}
+}
+
+static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+		glfwSetWindowShouldClose(window, GLFW_TRUE);
 	}
 }
 
@@ -388,15 +386,21 @@ void VulkanEngine::InitVulkan()
 			.request_validation_layers()
 			.use_default_debug_messenger()
 			.build();
+
 	if (!inst_ret) {
 		std::cerr << "Failed to create Vulkan instance. Error: " << inst_ret.error().message() << "\n";
 		return;
 	}
+
 	_vkb_inst = inst_ret.value();
 
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
 	window = glfwCreateWindow(1024, 1024, "Vulkan Triangle", NULL, NULL);
+
+	glfwSetKeyCallback(window, keyCallback);
+
 
 	_surface = VK_NULL_HANDLE;
 	VkResult glfw_result = glfwCreateWindowSurface(_vkb_inst, window, nullptr, &_surface);
